@@ -7,3 +7,4 @@ pyyaml
 scikit-image
 tqdm
 numpy
+opencv2
