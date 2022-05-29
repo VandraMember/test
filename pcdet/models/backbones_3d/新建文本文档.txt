@@ -1,0 +1,21 @@
+scatter_nd(indices, updates, shape):#根据indices将updates散布到新的（初始为零）张量。
+
+SparseTensor
+类：init 特征，索引，空间大小，训练样本数，体素大小，点云范围，哈希表大小，gather——dict，map_table（哈希表）
+
+dense:通过scatter_nd函数将特征嵌入坐标中
+
+Attention3D
+init:Attention Mode 多头注意力 线性dropout激活函数，输出层
+
+函数with_bs_cnt 
+函数with_coord 建立坐标
+
+SparseAttention3d 基于Attention3D
+init 新增strides, num_ds_voxels
+选择：#相对坐标#池化特征#没有query坐标？
+若有query坐标，会建立q_pos与p_pos，是两个神经网络
+
+函数create_gather_dict：#计算参与加入的voxel以及编码？
+函数downsample 下采样 返回缩小后的空间，索引，以及哈希表
+函数forward

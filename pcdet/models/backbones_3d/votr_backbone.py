@@ -9,6 +9,7 @@ def scatter_nd(indices, updates, shape):
     when indice repeats, don't support repeat add which is supported
     in tensorflow.
     """
+    #根据indices将updates散布到新的（初始为零）张量。
     ret = torch.zeros(*shape, dtype=updates.dtype, device=updates.device)
     ndim = indices.shape[-1]
     output_shape = list(indices.shape[:-1]) + shape[indices.shape[-1]:]
@@ -31,6 +32,8 @@ class SparseTensor(object):
         self.map_table = self.build_map_table() if not map_table else map_table
 
     @torch.no_grad()
+    #构建哈希查询表
+    #根据训练样本数，哈希表大小？空间大小以及索引
     def build_map_table(self):
         bs_cnt = torch.zeros(self.batch_size).int()
         for i in range(self.batch_size):
@@ -48,10 +51,10 @@ class SparseTensor(object):
     def dense(self, channels_first=True):
         reverse_spatial_shape = self.spatial_shape[::-1] # (ZYX)
         output_shape = [self.batch_size] + list(
-            reverse_spatial_shape) + [self.features.shape[1]]
+            reverse_spatial_shape) + [self.features.shape[1]]# 规定了输出的shape
         res = scatter_nd(
             self.indices.to(self.features.device).long(), self.features,
-            output_shape)
+            output_shape)#根据indice将特征嵌入新坐标
         if not channels_first:
             return res
         ndim = len(reverse_spatial_shape)
@@ -79,7 +82,7 @@ class Attention3d(nn.Module):
 
         self.activation = nn.ReLU()
 
-        self.output_layer = nn.Sequential(
+        self.output_layer = nn.Sequential( #输出层
             nn.Linear(input_channels, output_channels),
             nn.BatchNorm1d(output_channels),
             nn.ReLU()
@@ -87,14 +90,14 @@ class Attention3d(nn.Module):
 
     @torch.no_grad()
     def with_bs_cnt(self, indices, batch_size):
-        bs_cnt = torch.zeros(batch_size).int()
+        bs_cnt = torch.zeros(batch_size).int()#大小是一个训练集
         for i in range(batch_size):
             bs_cnt[i] = (indices[:, 0] == i).sum().item()
         bs_cnt = bs_cnt.to(indices.device)
         return bs_cnt
 
     @torch.no_grad()
-    def with_coords(self, indices, point_cloud_range, voxel_size):
+    def with_coords(self, indices, point_cloud_range, voxel_size):#建立坐标
         voxel_size = torch.tensor(voxel_size).unsqueeze(0).to(indices.device)
         min_range = torch.tensor(point_cloud_range[0:3]).unsqueeze(0).to(indices.device)
         coords = (indices[:, [3, 2, 1]].float() + 0.5) * voxel_size + min_range
@@ -103,20 +106,20 @@ class Attention3d(nn.Module):
     def forward(self, sp_tensor):
         raise NotImplementedError
 
-class SparseAttention3d(Attention3d):
+class SparseAttention3d(Attention3d):#基于ATTENTION 3D
     def __init__(self, input_channels, output_channels, ff_channels, dropout, num_heads, attention_modes, strides, num_ds_voxels,
                  use_relative_coords = False, use_pooled_feature = False, use_no_query_coords = False):
         super(SparseAttention3d, self).__init__(input_channels, output_channels, ff_channels, dropout, num_heads, attention_modes)
 
-        self.use_relative_coords = use_relative_coords
-        self.use_pooled_features = use_pooled_feature
-        self.use_no_query_coords = use_no_query_coords
+        self.use_relative_coords = use_relative_coords#相对坐标
+        self.use_pooled_features = use_pooled_feature#池化特征
+        self.use_no_query_coords = use_no_query_coords#没有query坐标？
 
         self.strides = strides
         self.num_ds_voxels = num_ds_voxels
 
         self.norm = nn.BatchNorm1d(input_channels)
-        if not self.use_no_query_coords:
+        if not self.use_no_query_coords:#这是处理坐标的吗？
             self.q_pos_proj = nn.Sequential(
                 nn.Linear(3, input_channels),
                 nn.ReLU(),
@@ -130,7 +133,7 @@ class SparseAttention3d(Attention3d):
     def create_gather_dict(self, attention_modes, map_table, voxel_indices, spatial_shape):
         _gather_dict = {}
         for attention_mode in attention_modes:
-            if attention_mode.NAME == 'LocalAttention':
+            if attention_mode.NAME == 'LocalAttention':#计算加入的voxel
                 attend_size = attention_mode.SIZE
                 attend_range = attention_mode.RANGE
                 _gather_indices = votr_utils.sparse_local_attention_hash_indices(spatial_shape, attend_size, attend_range, self.strides, map_table, voxel_indices)
@@ -159,8 +162,8 @@ class SparseAttention3d(Attention3d):
     def forward(self, sp_tensor):
         new_spatial_shape, new_indices, new_map_table = self.downsample(sp_tensor)
         vx, vy, vz = sp_tensor.voxel_size
-        new_voxel_size = [vx * self.strides[0], vy * self.strides[1], vz * self.strides[2]]
-        gather_dict = self.create_gather_dict(self.attention_modes, sp_tensor.map_table, new_indices, sp_tensor.spatial_shape)
+        new_voxel_size = [vx * self.strides[0], vy * self.strides[1], vz * self.strides[2]]#坐标缩小，体素体积变大
+        gather_dict = self.create_gather_dict(self.attention_modes, sp_tensor.map_table, new_indices, sp_tensor.spatial_shape)#建立参与计算的体素表
 
         voxel_features = sp_tensor.features
         v_bs_cnt = self.with_bs_cnt(sp_tensor.indices, sp_tensor.batch_size)
@@ -173,7 +176,7 @@ class SparseAttention3d(Attention3d):
             a_key_mask.append(key_mask)
 
         key_indices = torch.cat(a_key_indices, dim = 1)
-        key_mask = torch.cat(a_key_mask, dim = 1)
+        key_mask = torch.cat(a_key_mask, dim = 1)#全部拼接
 
         key_features = votr_utils.grouping_operation(voxel_features, v_bs_cnt, key_indices, k_bs_cnt)
         voxel_coords = self.with_coords(sp_tensor.indices, sp_tensor.point_cloud_range, sp_tensor.voxel_size)

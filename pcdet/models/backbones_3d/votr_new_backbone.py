@@ -135,7 +135,8 @@ class DownModule(nn.Module):
         self.strides = strides
         self.num_ds_voxels = num_ds_voxels
         # Hard Code 8 as nsample
-        self.projection = nn.Conv1d(input_channels, output_channels, 1) if self.down_type != 'reshape' else nn.Linear(input_channels * 8, output_channels, bias=False)
+        self.projection = nn.Conv1d(input_channels, output_channels, 1) if self.down_type != 'reshape' \
+            else nn.Linear(input_channels * 8, output_channels, bias=False)
         self.norm = nn.BatchNorm1d(output_channels) if self.norm_type == 'BN' else nn.LayerNorm(output_channels)
 
         if self.ac_type == 'ReLU':
@@ -155,7 +156,8 @@ class DownModule(nn.Module):
             if attention_mode.NAME == 'LocalAttention':
                 attend_size = attention_mode.SIZE
                 attend_range = attention_mode.RANGE
-                _gather_indices = votr_utils.sparse_local_attention_hash_indices(spatial_shape, attend_size, attend_range, self.strides, map_table, voxel_indices)
+                _gather_indices = votr_utils.sparse_local_attention_hash_indices(spatial_shape,
+                attend_size, attend_range, self.strides, map_table, voxel_indices)
             else:
                 raise NotImplementedError
 
@@ -171,7 +173,8 @@ class DownModule(nn.Module):
         y_shape = sp_tensor.spatial_shape[1] // self.strides[1]
         z_shape = sp_tensor.spatial_shape[2] // self.strides[2]
         new_spatial_shape = [x_shape, y_shape, z_shape]
-        new_indices, new_map_table = votr_utils.hash_table_down_sample(self.strides, self.num_ds_voxels, sp_tensor.batch_size, sp_tensor.hash_size, new_spatial_shape, sp_tensor.indices)
+        new_indices, new_map_table = votr_utils.hash_table_down_sample(self.strides,
+        self.num_ds_voxels, sp_tensor.batch_size, sp_tensor.hash_size, new_spatial_shape, sp_tensor.indices)
         return new_spatial_shape, new_indices, new_map_table
 
     @torch.no_grad()
@@ -229,7 +232,8 @@ class DownModule(nn.Module):
 class SubMAttention3d(Attention3d):
     def __init__(self, input_channels, output_channels, ff_channels, dropout, num_heads, attention_modes, scale,
                  norm_type = 'BN', ac_type = 'ReLU'):
-        super(SubMAttention3d, self).__init__(input_channels, output_channels, ff_channels, dropout, num_heads, attention_modes, norm_type, ac_type)
+        super(SubMAttention3d, self).__init__(input_channels, output_channels,
+                                              ff_channels, dropout, num_heads, attention_modes, norm_type, ac_type)
         self.scale = (input_channels // num_heads) ** (scale * 0.5)
 
     @torch.no_grad()
@@ -239,11 +243,13 @@ class SubMAttention3d(Attention3d):
             if attention_mode.NAME == 'LocalAttention':
                 attend_size = attention_mode.SIZE
                 attend_range = attention_mode.RANGE
-                _gather_indices = votr_utils.subm_local_attention_hash_indices(spatial_shape, attend_size, attend_range, map_table, voxel_indices)
+                _gather_indices = votr_utils.subm_local_attention_hash_indices\
+                    (spatial_shape, attend_size, attend_range, map_table, voxel_indices)
             elif attention_mode.NAME == 'StridedAttention':
                 attend_size = attention_mode.SIZE
                 range_spec = attention_mode.RANGE_SPEC
-                _gather_indices = votr_utils.subm_strided_attention_hash_indices(spatial_shape, attend_size, range_spec, map_table, voxel_indices)
+                _gather_indices = votr_utils.subm_strided_attention_hash_indices\
+                    (spatial_shape, attend_size, range_spec, map_table, voxel_indices)
             else:
                 raise NotImplementedError
 
